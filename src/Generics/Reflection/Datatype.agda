@@ -10,6 +10,11 @@ open import Generics.Telescope
 open import Generics.Description 
 open import Generics.Reflection.Telescope
 
+open import Data.Nat.Properties using (<-strictTotalOrder)
+open import Data.Tree.AVL.Map (<-strictTotalOrder) as M hiding (foldr)
+
+open import Data.List public using (take)
+
 private
   variable
     rb  : RecB
@@ -48,42 +53,44 @@ module _ {T : Tel ℓ} (`A : ⟦ T ⟧ᵗ → TC Type) where
     `R ← RecDToType R
     extendContext "_" (vArg (quoteTerm ⊤)) do
       vΠ[ `R ]_ <$> ConDToType D
+
   ConDsToTypes : (Ds : ConDs ⟦ T ⟧ᵗ cbs) → TC Types
   ConDsToTypes []       = return []
   ConDsToTypes (D ∷ Ds) = ⦇ ConDToType D ∷ ConDsToTypes Ds ⦈
 
-getCons : Name → (`Param : Telescope) → PDataD → TC Types
-getCons d `Param Dᵖ = exCxtTel Param λ ps → ConDsToTypes (typeOfData d ps) (applyP ps)
+getCons : Name → (`Param+Index : Telescope) → PDataD → TC Types
+getCons d `Param+Index Dᵖ = exCxtTel Param λ ps → ConDsToTypes (typeOfData d ps `Param+Index) (applyP ps)
   where open PDataD Dᵖ
 {-# INLINE getCons #-}
 
-getSignature : PDataD → TC (Telescope × Type)
+getSignature : PDataD → TC (Telescope × Telescope × Type)
 getSignature Dᵖ = do
-  `Param       ← fromTel Param (constTelInfo visible)
-  `Param+Index ← fromTel (Param ++ Index) (constTelInfo visible)
+  `Param+Index ← correctVsOfTel =<< fromTel' (Param ++ Index)
+  `Param ← fromTel' Param
+  let `Param = take (length `Param) `Param+Index
+  -- dprint (strErr "`Param+Index:\n" ∷ strErr (show `Param+Index) ∷ [])
   dT ← extend*Context `Param+Index do
     `Setℓ ← quoteTC! (Set dlevel)
     return $ ⇑ (`Param+Index , `Setℓ) ⦂ Type
 
-  return $ `Param , dT
+  return $ `Param , `Param+Index , dT
   where open PDataD Dᵖ
 
 defineByDataD : DataD → Name → List Name → TC _
 defineByDataD dataD dataN conNs = exCxtℓs #levels λ ℓs → do
   let `Levels = `Levels #levels
   let Dᵖ      = applyL ℓs
-  `Param , dT ← withNormalisation true $ getSignature Dᵖ
-  -- dprint (strErr "`Param:\n" ∷ strErr (show `Param) ∷ [])
-  -- dprint (strErr "Type:\n" ∷ termErr dT ∷ [])
+  `Param , `Param+Index , dT ← withNormalisation true $ getSignature Dᵖ
+  dprint (strErr (show dataN <> "'s type: ") ∷ termErr dT ∷ [])
   declareData dataN (#levels + length `Param) (prependToType `Levels dT)
-
-  conTs ← withNormalisation true $ getCons dataN `Param Dᵖ
-
+  conTs ← withNormalisation true $ getCons dataN `Param+Index Dᵖ
+  -- dprint (strErr "conTs: \n" ∷ Prelude.map (λ t → strErr $ show t <> "\n\n") conTs)
+  conTs ← mapM (λ conT → fmap fst $ correctVsOfTerm conT M.empty 0) conTs
+  dprint (strErr "conTs': \n" ∷ Prelude.map (λ t → strErr $ show t <> "\n\n") conTs)
   let |conTs| = length conTs ; |conNs| = length conNs
   when (|conTs| /= |conNs|) $ typeError {A = ⊤}
     (strErr ("The number of required constructor names: " <> show |conTs|) ∷
     strErr ("\n ≠ \nthe number of given names: " <> show |conNs|) ∷ [])
-
   defineData dataN (zip conNs conTs)
   printData dataN
   where open DataD dataD
@@ -219,3 +226,4 @@ macro
   printByDataD D s cs hole = do s ← printByDataD' D s cs
                                 dprint [ strErr s ]
 -}
+ 

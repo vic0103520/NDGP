@@ -21,6 +21,7 @@ Types      = List Type
 Clauses    = List Clause
 Context    = List (Arg Type)
 ErrorParts = List ErrorPart
+Telescopes = List Telescope
 
 Args : Set ℓ → Set ℓ
 Args A = List (Arg A)

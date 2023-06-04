@@ -4,7 +4,10 @@ open import Prelude
 
 module Generics.Telescope where
 
-open import Agda.Builtin.Reflection public using (Visibility; visible; hidden; instance′)
+open import Agda.Builtin.Reflection using (quoteωTC; arg)
+
+open import Agda.Builtin.Reflection as Reflection public using (Visibility; visible; hidden; instance′; Telescope)
+open import Utils.Reflection.Tactic
 
 infixr 5 _∷_
 infixr 4 _++_
